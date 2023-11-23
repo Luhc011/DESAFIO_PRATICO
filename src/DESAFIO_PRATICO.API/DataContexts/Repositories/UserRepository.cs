@@ -1,5 +1,6 @@
 ﻿using DESAFIO_PRATICO.API.DataContexts.Data;
 using DESAFIO_PRATICO.API.DataContexts.Repositories.Contracts;
+using DESAFIO_PRATICO.API.Exceptions;
 using DESAFIO_PRATICO.API.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,8 +9,13 @@ namespace DESAFIO_PRATICO.API.DataContexts.Repositories
     public class UserRepository : IUserRepository
     {
         private readonly TaskDbContext _context;
+        private readonly ILogger<UserRepository> _logger;
 
-        public UserRepository(TaskDbContext context) => _context = context;
+        public UserRepository(TaskDbContext context, ILogger<UserRepository> logger)
+        {
+            _context = context ?? throw new ArgumentNullException(nameof(context));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
 
         public async Task<IEnumerable<UserModel>> GetAllAsync()
             => await _context.Users!.ToListAsync();
@@ -18,18 +24,26 @@ namespace DESAFIO_PRATICO.API.DataContexts.Repositories
         {
             var users = await _context.Users!.FirstOrDefaultAsync(u => u.Id == id);
 
-            return users is null
-                ? throw new Exception("User not found")
-                : users;
+            if (users is null)
+            {
+                _logger.LogInformation("User id {Id}, not found", id);
+                throw new UserNotFoundException($"User id {id}, not found");
+            }
+
+            return users;
         }
 
         public async Task<UserModel> GetByNameAsync(string username)
         {
             var users = await _context.Users!.FirstOrDefaultAsync(u => u.Name == username);
 
-            return users is null
-                ? throw new Exception("User not found")
-                : users;
+            if (users is null)
+            {
+                _logger.LogInformation("User with username {Username} not found", username);
+                throw new UserNotFoundException($"User with username {username} not found");
+            }
+
+            return users;
         }
 
         public async Task<UserModel> CreateAsync(UserModel user)
@@ -51,12 +65,12 @@ namespace DESAFIO_PRATICO.API.DataContexts.Repositories
             }
 
             return userExists is null
-                ? throw new Exception($"User id {id}, not found")
+                ? throw new UserNotFoundException($"User id {id}, not found")
                 : userExists;
         }
         public async Task<bool> DeleteAsync(int id)
         {
-            var user = await GetByIdAsync(id) ?? throw new Exception($"User id {id}, not found");
+            var user = await GetByIdAsync(id) ?? throw new UserNotFoundException($"User id {id}, not found");
 
             _context.Users!.Remove(user);
             await _context.SaveChangesAsync();
